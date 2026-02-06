@@ -1,0 +1,24 @@
+# Copy this file to terraform.tfvars and fill in your actual values
+
+aws_region     = "us-east-1"
+vpc_id         = "vpc-xxxxxxxxxxxxxxxxx"
+subnet_id      = "subnet-xxxxxxxxxxxxxxxxx"
+instance_type  = "t3.medium"
+key_name       = "your-ec2-key-pair-name"
+volume_size    = 30
+use_elastic_ip = false
+
+# Restrict SSH access to your IP in production
+ssh_cidr_blocks = ["your.ip.address/32"]
+
+# Get this from Tailscale admin console: Settings > Keys > Generate auth key
+tailscale_auth_key = "tskey-auth-xxxxxxxxxxxx-xxxxxxxxxxxxxxxxxxxxxxxx"
+
+# OpenClaw configuration (adjust based on your needs)
+openclaw_config = <<EOF
+{
+  "api_port": 8080,
+  "model": "gpt-4",
+  "api_key": "your-api-key-here"
+}
+EOF
