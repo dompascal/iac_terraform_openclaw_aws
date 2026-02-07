@@ -120,8 +120,11 @@ resource "aws_instance" "openclaw" {
   }
 
   user_data = templatefile("${path.module}/user_data.sh", {
-    tailscale_auth_key = var.tailscale_auth_key
-    openclaw_config    = var.openclaw_config
+    tailscale_auth_key     = var.tailscale_auth_key
+    openclaw_config        = var.openclaw_config
+    openclaw_gateway_token = var.openclaw_gateway_token
+    moonshot_api_key       = var.moonshot_api_key
+    moonshot_model         = var.moonshot_model
   })
 
   tags = {

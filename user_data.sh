@@ -6,7 +6,22 @@ apt-get update
 apt-get upgrade -y
 
 # Install dependencies
-apt-get install -y curl wget git software-properties-common
+apt-get install -y curl wget git software-properties-common zsh
+
+# Install Oh My Zsh for ubuntu user
+sudo -u ubuntu sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
+
+# Install zsh-autosuggestions plugin
+sudo -u ubuntu git clone https://github.com/zsh-users/zsh-autosuggestions /home/ubuntu/.oh-my-zsh/custom/plugins/zsh-autosuggestions
+
+# Install zsh-syntax-highlighting plugin
+sudo -u ubuntu git clone https://github.com/zsh-users/zsh-syntax-highlighting /home/ubuntu/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting
+
+# Configure Oh My Zsh plugins
+sed -i 's/plugins=(git)/plugins=(git zsh-autosuggestions zsh-syntax-highlighting docker docker-compose)/' /home/ubuntu/.zshrc
+
+# Set zsh as default shell for ubuntu user
+chsh -s $(which zsh) ubuntu
 
 # Install Docker
 curl -fsSL https://get.docker.com -o get-docker.sh
@@ -28,41 +43,47 @@ tailscale up --authkey="${tailscale_auth_key}" --accept-routes --advertise-exit-
 mkdir -p /opt/openclaw
 cd /opt/openclaw
 
+# Clone OpenClaw repository
+git clone https://github.com/openclaw/openclaw.git .
+
 # Create OpenClaw configuration file
-cat > /opt/openclaw/config.json <<'EOF'
+cat > /opt/openclaw/openclaw.json <<'EOF'
 ${openclaw_config}
 EOF
 
-# Create docker-compose file for OpenClaw
-# Note: Adjust this based on OpenClaw's actual Docker setup
-cat > /opt/openclaw/docker-compose.yml <<'EOF'
-version: '3.8'
+# Create OpenClaw directories with correct permissions for node user (UID 1000)
+mkdir -p /opt/openclaw/config/agents/main/agent
+mkdir -p /opt/openclaw/config/credentials
+mkdir -p /opt/openclaw/workspace
+mkdir -p /opt/openclaw/.openclaw
 
-services:
-  openclaw:
-    image: openclaw/openclaw:latest
-    container_name: openclaw
-    restart: unless-stopped
-    ports:
-      - "8080:8080"
-    volumes:
-      - ./config.json:/app/config.json
-      - openclaw-data:/app/data
-    environment:
-      - CONFIG_FILE=/app/config.json
-    networks:
-      - openclaw-network
+# Set ownership to node user (UID 1000 in the container)
+chown -R 1000:1000 /opt/openclaw/config
+chown -R 1000:1000 /opt/openclaw/workspace
+chown -R 1000:1000 /opt/openclaw/.openclaw
 
-volumes:
-  openclaw-data:
+# Create .env file for docker-compose
+cat > /opt/openclaw/.env <<ENVEOF
+OPENCLAW_CONFIG_DIR=/opt/openclaw/config
+OPENCLAW_WORKSPACE_DIR=/opt/openclaw/workspace
+OPENCLAW_HOME=/opt/openclaw/.openclaw
+OPENCLAW_GATEWAY_TOKEN=${openclaw_gateway_token}
+MOONSHOT_API_KEY=${moonshot_api_key}
+MOONSHOT_MODEL=${moonshot_model}
+LLM_PROVIDER=moonshot
+# Set empty values to silence Claude warnings (not using Claude)
+CLAUDE_AI_SESSION_KEY=
+CLAUDE_WEB_SESSION_KEY=
+CLAUDE_WEB_COOKIE=
+ENVEOF
 
-networks:
-  openclaw-network:
-    driver: bridge
-EOF
+# Set correct ownership for .env and all openclaw files
+chown -R 1000:1000 /opt/openclaw/.env
+chown -R 1000:1000 /opt/openclaw
 
-# Start OpenClaw
-docker-compose up -d
+# Run the docker setup script from the repo
+chmod +x ./docker-setup.sh
+./docker-setup.sh
 
 # Enable IP forwarding for Tailscale exit node (if needed)
 echo 'net.ipv4.ip_forward = 1' | tee -a /etc/sysctl.conf

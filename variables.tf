@@ -54,3 +54,22 @@ variable "use_elastic_ip" {
   type        = bool
   default     = false
 }
+
+variable "openclaw_gateway_token" {
+  description = "OpenClaw gateway authentication token"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "moonshot_api_key" {
+  description = "Kimi/Moonshot API key from platform.moonshot.cn"
+  type        = string
+  sensitive   = true
+}
+
+variable "moonshot_model" {
+  description = "Moonshot model to use (moonshot-v1-8k, moonshot-v1-32k, moonshot-v1-128k)"
+  type        = string
+  default     = "moonshot-v1-8k"
+}
