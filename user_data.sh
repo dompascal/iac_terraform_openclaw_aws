@@ -55,18 +55,38 @@ EOF
 mkdir -p /opt/openclaw/config/agents/main/agent
 mkdir -p /opt/openclaw/config/credentials
 mkdir -p /opt/openclaw/workspace
-mkdir -p /opt/openclaw/.openclaw
 
-# Set ownership to node user (UID 1000 in the container)
+# Create OpenClaw configuration file in config directory (mounted as /home/node/.openclaw)
+cat > /opt/openclaw/config/openclaw.json <<CONFIGEOF
+{
+  "gateway": {
+    "mode": "local",
+    "bind": "lan",
+    "port": 18789
+  },
+  "agent": {
+    "model": "moonshot/${moonshot_model}"
+  },
+  "providers": {
+    "moonshot": {
+      "apiKey": "${moonshot_api_key}"
+    }
+  }
+}
+CONFIGEOF
+
+# Set correct ownership for all openclaw files and directories
+# node user inside container has UID 1000
+# The container mounts config -> /home/node/.openclaw, so it needs full write access
 chown -R 1000:1000 /opt/openclaw/config
 chown -R 1000:1000 /opt/openclaw/workspace
-chown -R 1000:1000 /opt/openclaw/.openclaw
+chmod -R 755 /opt/openclaw/config
+chmod -R 755 /opt/openclaw/workspace
 
 # Create .env file for docker-compose
 cat > /opt/openclaw/.env <<ENVEOF
 OPENCLAW_CONFIG_DIR=/opt/openclaw/config
 OPENCLAW_WORKSPACE_DIR=/opt/openclaw/workspace
-OPENCLAW_HOME=/opt/openclaw/.openclaw
 OPENCLAW_GATEWAY_TOKEN=${openclaw_gateway_token}
 MOONSHOT_API_KEY=${moonshot_api_key}
 MOONSHOT_MODEL=${moonshot_model}
@@ -77,9 +97,52 @@ CLAUDE_WEB_SESSION_KEY=
 CLAUDE_WEB_COOKIE=
 ENVEOF
 
-# Set correct ownership for .env and all openclaw files
-chown -R 1000:1000 /opt/openclaw/.env
-chown -R 1000:1000 /opt/openclaw
+# .env needs to be readable by the node user (UID 1000) in container
+chown 1000:1000 /opt/openclaw/.env
+chmod 644 /opt/openclaw/.env
+
+# Create custom Dockerfile with correct permissions (fixes EACCES permission denied)
+cat > /opt/openclaw/Dockerfile.override <<'DOCKEREOF'
+FROM node:18-alpine
+
+# Install OpenClaw
+RUN npm install -g openclaw
+
+# Create non-root user
+RUN addgroup -g 1000 node && \
+    adduser -D -u 1000 -G node -h /home/node node
+
+# Set working directory
+WORKDIR /home/node
+
+# Create .openclaw directory with correct ownership
+RUN mkdir -p /home/node/.openclaw && \
+    chown -R node:node /home/node/.openclaw
+
+# Switch to non-root user
+USER node
+
+# OpenClaw config goes here
+ENV OPENCLAW_CONFIG=/home/node/.openclaw/openclaw.json
+
+CMD ["openclaw"]
+DOCKEREOF
+
+# Create docker-compose.override.yml to use the custom Dockerfile
+cat > /opt/openclaw/docker-compose.override.yml <<'OVERRIDEEOF'
+
+services:
+  openclaw-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.override
+    user: "1000:1000"
+  openclaw-cli:
+    build:
+      context: .
+      dockerfile: Dockerfile.override
+    user: "1000:1000"
+OVERRIDEEOF
 
 # Run the docker setup script from the repo
 chmod +x ./docker-setup.sh
